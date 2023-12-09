@@ -54,9 +54,9 @@ CREATE TABLE segment_fault
 (
     id                serial PRIMARY KEY,
     rw_seg_id         integer,
-    fault_class       integer NOT NULL,
+    fault_class       fault_class NOT NULL,
     position_point_km integer,
-    fault_status      fault_status
+    fault_status      fault_status NOT NULL
 );
 
 CREATE TABLE repair_team_route

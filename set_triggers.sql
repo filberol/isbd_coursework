@@ -2,9 +2,9 @@
 create or replace function delete_fault_with_fixation_trigger()
     returns trigger as $$
 begin
-    delete from segment_fault where id = old.segment_fault_id;
-    return old;
-end; $$ language plpgsql;
+    delete from segment_fault where id = new.segment_fault_id;
+    return new;
+end $$ language plpgsql;
 
 create trigger delete_fault_with_fixation
     after delete on site_fault_fixation for each row
@@ -15,11 +15,11 @@ create trigger delete_fault_with_fixation
 create or replace function prevent_delete_route_schedule_trigger()
     returns trigger as $$
 begin
-    if exists(select 1 from repair_team_route where id = old.route_id) then
+    if exists(select 1 from repair_team_route where id = new.route_id) then
         raise exception 'Cannot delete schedule for existing route';
     end if;
-    return old;
-end; $$ language plpgsql;
+    return new;
+end $$ language plpgsql;
 
 create trigger prevent_delete_route_schedule
     before delete on repair_team_route_schedule for each row
@@ -33,17 +33,19 @@ create or replace function add_resources_to_warehouse_trigger()
     returns trigger as $$
 begin
     update warehouse
-    set resources_available_km = resources_available_km + old.resources_allocated_km
-    where id = old.warehouse_id;
-end; $$ language plpgsql;
+    set resources_available_km = resources_available_km + new.resources_allocated_km
+    where id = new.warehouse_id;
+    return new;
+end $$ language plpgsql;
 -- (trigger to cancel resource allocation)
 create or replace function cancel_add_resources_to_warehouse_trigger()
     returns trigger as $$
 begin
     update warehouse
-    set resources_available_km = resources_available_km - old.resources_allocated_km
-    where id = old.warehouse_id;
-end; $$ language plpgsql;
+    set resources_available_km = resources_available_km - new.resources_allocated_km
+    where id = new.warehouse_id;
+    return new;
+end $$ language plpgsql;
 
 create trigger add_resources_to_warehouse
     after insert on warehouse_resource_allocation for each row
@@ -59,41 +61,44 @@ create or replace function depart_resources_to_warehouse_trigger()
 begin
     update warehouse
     set resources_available_km = warehouse.resources_available_km - 10
-    where id = old.from_warehouse_id;
-end; $$ language plpgsql;
+    where id = new.from_warehouse_id;
+    return new;
+end $$ language plpgsql;
 
 -- (trigger to finish resource transportation)
 create or replace function arrive_resources_to_warehouse_trigger()
     returns trigger as $$
 begin
-    if old.finish_at is not null then
+    if new.finish_at is not null then
         update warehouse
         set resources_available_km = warehouse.resources_available_km + 10
-        where id = old.to_warehouse_id;
+        where id = new.to_warehouse_id;
     end if;
-end; $$ language plpgsql;
+    return new;
+end $$ language plpgsql;
 
 -- (trigger to cancel resource transportation)
 create or replace function cancel_transport_to_warehouse_trigger()
     returns trigger as $$
 begin
-    -- return to old warehouse
+    -- return to new warehouse
     update warehouse
     set resources_available_km = warehouse.resources_available_km + 10
-    where id = old.from_warehouse_id;
+    where id = new.from_warehouse_id;
     -- if added to new then go back
-    if old.finish_at is not null then
+    if new.finish_at is not null then
         update warehouse
         set resources_available_km = warehouse.resources_available_km - 10
-        where id = old.to_warehouse_id;
+        where id = new.to_warehouse_id;
     end if;
-end; $$ language plpgsql;
+    return new;
+end $$ language plpgsql;
 
 create trigger depart_resources_to_warehouse
     after insert on resource_transportation for each row
     execute function depart_resources_to_warehouse_trigger();
 create trigger arrive_resources_to_warehouse
-    after update on resource_transportation for each row
+    after update or insert on resource_transportation for each row
     execute function arrive_resources_to_warehouse_trigger();
 create trigger cancel_transport_to_warehouse
     after delete on resource_transportation for each row
@@ -108,22 +113,24 @@ begin
     update repair_base
     set curr_teams_hosted = curr_teams_hosted - 1
     where id = (
-        select from_base_id from repair_team_route where id = old.route_id
+        select from_base_id from repair_team_route where id = new.route_id
             );
-end; $$ language plpgsql;
+    return new;
+end $$ language plpgsql;
 
 -- (trigger to finish team route)
 create or replace function arrive_repair_team_to_base_trigger()
     returns trigger as $$
 begin
-    if old.arrived_at is not null then
+    if new.arrived_at is not null then
         update repair_base
         set curr_teams_hosted = curr_teams_hosted + 1
         where id = (
-            select to_base_id from repair_team_route where id = old.route_id
+            select to_base_id from repair_team_route where id = new.route_id
             );
     end if;
-end; $$ language plpgsql;
+    return new;
+end $$ language plpgsql;
 
 -- (trigger to cancel team route)
 create or replace function cancel_team_route_trigger()
@@ -132,22 +139,23 @@ begin
     update repair_base
     set curr_teams_hosted = curr_teams_hosted + 1
     where id = (
-        select from_base_id from repair_team_route where id = old.route_id
+        select from_base_id from repair_team_route where id = new.route_id
     );
-    if old.arrived_at is not null then
+    if new.arrived_at is not null then
         update repair_base
         set curr_teams_hosted = curr_teams_hosted - 1
         where id = (
-            select to_base_id from repair_team_route where id = old.route_id
+            select to_base_id from repair_team_route where id = new.route_id
         );
     end if;
-end; $$ language plpgsql;
+    return new;
+end $$ language plpgsql;
 
 create trigger depart_repair_team_to_base
     after insert on repair_team_route_schedule for each row
     execute function depart_repair_team_to_base_trigger();
 create trigger arrive_repair_team_to_base
-    after update on repair_team_route_schedule for each row
+    after update or insert on repair_team_route_schedule for each row
     execute function arrive_repair_team_to_base_trigger();
 create or replace trigger cancel_team_route
     after delete on repair_team_route_schedule for each row
