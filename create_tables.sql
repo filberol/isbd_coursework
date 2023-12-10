@@ -123,5 +123,6 @@ CREATE TABLE resource_transportation
     from_warehouse_id integer,
     to_warehouse_id   integer,
     start_at          timestamp,
-    finish_at         timestamp DEFAULT null
+    finish_at         timestamp DEFAULT null,
+    resources_transportation_km integer
 );
