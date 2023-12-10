@@ -206,6 +206,8 @@ def generate_repair_team_routes(file, base_count):
                 fault_class = random.choice(fault_classes)
                 file.write(f"insert into segment_fault (rw_seg_id, fault_class, position_point_km, fault_status) "
                            f"values ({seg_id}, '{fault_class}', {seg_point_km}, 'not_repaired');\n")
+                file.write(f"insert into site_fault_fixation (segment_fault_id, route_id, found_at, fault_class) "
+                           f"values ({curr_fault_id}, {route_ind + 1}, '{time}', '{fault_class}');\n")
         except StopIteration:
             pass
     for route_ind in range(unfinished_routes):

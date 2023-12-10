@@ -60,7 +60,7 @@ create or replace function depart_resources_to_warehouse_trigger()
     returns trigger as $$
 begin
     update warehouse
-    set resources_available_km = warehouse.resources_available_km - 10
+    set resources_available_km = warehouse.resources_available_km - new.resources_transportation_km
     where id = new.from_warehouse_id;
     return new;
 end $$ language plpgsql;
@@ -71,7 +71,7 @@ create or replace function arrive_resources_to_warehouse_trigger()
 begin
     if new.finish_at is not null then
         update warehouse
-        set resources_available_km = warehouse.resources_available_km + 10
+        set resources_available_km = warehouse.resources_available_km + new.resources_transportation_km
         where id = new.to_warehouse_id;
     end if;
     return new;
@@ -83,12 +83,12 @@ create or replace function cancel_transport_to_warehouse_trigger()
 begin
     -- return to new warehouse
     update warehouse
-    set resources_available_km = warehouse.resources_available_km + 10
+    set resources_available_km = warehouse.resources_available_km + new.resources_transportation_km
     where id = new.from_warehouse_id;
     -- if added to new then go back
     if new.finish_at is not null then
         update warehouse
-        set resources_available_km = warehouse.resources_available_km - 10
+        set resources_available_km = warehouse.resources_available_km - new.resources_transportation_km
         where id = new.to_warehouse_id;
     end if;
     return new;

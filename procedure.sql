@@ -1,259 +1,306 @@
--- добавить новую компанию
+-- Р”РѕР±Р°РІРёС‚СЊ РЅРѕРІСѓСЋ РєРѕРјРїР°РЅРёСЋ
 create or replace function add_company(company_name varchar(50))
-    returns void as
+    returns integer as
 $$
-BEGIN
-    insert into company(name) values (company_name);
+declare
+    new_id integer;
+begin
+    insert into company(name) values (company_name) returning id into new_id;
+    return new_id;
 end
 $$ language plpgsql;
--- добавить новую станцию в railway_station по id владельца
+
+-- Р”РѕР±Р°РІРёС‚СЊ РЅРѕРІСѓСЋ СЃС‚Р°РЅС†РёСЋ СЃ РёРјРµРЅРµРј
 create or replace function add_railway_station(station_name varchar(50), owner integer)
-    returns void as
+    returns integer as
 $$
-BEGIN
-    insert into railway_station(name, owner_id) values (station_name, owner);
+declare
+    new_id integer;
+begin
+    insert into railway_station(name, owner_id) values (station_name, owner) returning id into new_id;
+    return new_id;
 end
 $$ language plpgsql;
 
--- добавить новую станцию в railway_station по имени владельца
+-- Р”РѕР±Р°РІРёС‚СЊ СЃС‚Р°РЅС†РёСЋ СЃ РІРґР°РґРµР»СЊС†РµРј РїРѕ РЅР°Р·РІР°РЅРёСЋ
 create or replace function add_railway_station(name varchar(50), owner varchar(50))
-    returns void as
+    returns integer as
 $$
-BEGIN
-    perform add_railway_station(name, (select id from company where company.name = owner));
+declare
+    new_id integer;
+begin
+    new_id := add_railway_station(name, (select id from company where company.name = owner));
+    return new_id;
 end
 $$ language plpgsql;
 
-
--- добавить информацию о станции в railway_segment по id станций
+-- Р”РѕР±Р°РІРёС‚СЊ РґРѕСЂРѕРіСѓ РјРµР¶РґСѓ СЃС‚Р°РЅС†РёСЏРјРё
 create or replace function add_railway_segment(rs_from integer, rs_to integer, length integer)
     returns void as
 $$
-BEGIN
+begin
     insert into railway_segment(from_rs, to_rs, length_km) values (rs_from, rs_to, length);
+    insert into railway_segment(from_rs, to_rs, length_km) values (rs_to, rs_from, length_km);
 end
 $$ language plpgsql;
 
--- добавить информацию о станции в railway_segment по именам станций
+-- Р”РѕР±Р°РІРёС‚СЊ РґРѕСЂРѕРіСѓ РјРµР¶РґСѓ СЃС‚Р°РЅС†РёСЏРјРё РїРѕ РёРјРµРЅРё
 create or replace function add_railway_segment(rs_from varchar(50), rs_to varchar(50), length integer)
     returns void as
 $$
-BEGIN
-    perform add_railway_segment((select id from railway_station where name = rs_from),
-                                (select id from railway_station where name = rs_to), length);
+declare
+    rs_from_id integer;
+    rs_to_id   integer;
+begin
+    rs_from_id := (select id from railway_station where name = rs_from);
+    rs_to_id := (select id from railway_station where name = rs_to);
+    perform add_railway_segment(rs_from_id, rs_to_id, length);
+    perform add_railway_segment(rs_to_id, rs_from_id, length);
 end
 $$ language plpgsql;
 
--- назначить станции склад
+-- РЎРѕР·РґР°С‚СЊ СЃРєР»Р°Рґ РґР»СЏ СЃС‚Р°РЅС†РёРё
 create or replace function init_warehouse(station_name varchar(50))
-    returns void as
+    returns integer as
 $$
-BEGIN
+declare
+    new_id integer;
+begin
     insert into warehouse(station_id, resources_available_km)
-    values ((select id
-             from railway_station
-             where name = station_name), 0);
+    values ((select id from railway_station where name = station_name), 0)
+    returning id into new_id;
+    return new_id;
 end
 $$ language plpgsql;
--- назначить станции repair_base
+
+-- РЎРѕР·РґР°С‚СЊ СЂРµРјРѕРЅС‚РЅСѓСЋ Р±Р°Р·Сѓ РґР»СЏ СЃС‚Р°РЅС†РёРё
 create or replace function init_repair_base(station_name varchar(50))
-    returns void as
+    returns integer as
 $$
-BEGIN
+declare
+    new_id integer;
+begin
     insert into repair_base(station_id, size_teams, curr_teams_hosted)
-    values ((select id
-             from railway_station
-             where name = station_name), 0, 0);
+    values ((select id from railway_station where name = station_name), 0, 0)
+    returning id into new_id;
+    return new_id;
 end
 $$ language plpgsql;
 
--- добавить новую станцию и railway_segment по id, назначить склад и repair_base
-create or replace function add_railway_station_and_segment(name varchar(50), owner_id integer, rs_from integer,
-                                                           rs_to integer, length integer)
-    returns void as
+-- РЎРѕР·РґР°С‚СЊ СЃС‚Р°РЅС†РёСЋ, СЃРѕРµРґРёРЅРёС‚СЊ СЃ РґСЂСѓРіРѕР№ Рё РґРѕР±Р°РІРёС‚СЊ СЃРєР»Р°Рґ СЃ Р±Р°Р·РѕР№
+create or replace function add_railway_station_and_segment(
+    stat_name varchar(50), owner varchar(50), to_station integer, length integer
+) returns void as
 $$
-BEGIN
-    perform add_railway_station(name, owner_id);
+declare
+    rs_from integer;
+begin
+    rs_from := add_railway_station(stat_name, owner);
+    perform add_railway_segment(rs_from, to_station, length);
+    perform init_warehouse(stat_name);
+    perform init_repair_base(stat_name);
+end
+$$ language plpgsql;
+
+-- РЎРѕР·РґР°С‚СЊ СЃС‚Р°РЅС†РёСЋ, СЃРѕРµРґРёРЅРёС‚СЊ СЃ РґСЂСѓРіРѕР№ РїРѕ РёРјРµРЅРё Рё РґРѕР±Р°РІРёС‚СЊ СЃРєР»Р°Рґ СЃ Р±Р°Р·РѕР№
+create or replace function add_railway_station_and_segment(
+    stat_name varchar(50), owner varchar(50), to_station varchar(50), length integer
+) returns void as
+$$
+declare
+    rs_from integer;
+    rs_to   integer;
+begin
+    rs_from := add_railway_station(stat_name, owner);
+    rs_to := (select id from railway_station where name = to_station);
     perform add_railway_segment(rs_from, rs_to, length);
-    perform init_warehouse(name);
-    perform init_repair_base(name);
+    perform init_warehouse(stat_name);
+    perform init_repair_base(stat_name);
 end
 $$ language plpgsql;
 
--- добавить новую станцию и railway_segment по именам, назначить склад и repair_base
-create or replace function add_railway_station_and_segment(name varchar(50), owner varchar(50), rs_from varchar(50),
-                                                           rs_to varchar(50), length integer)
-    returns void as
-$$
-BEGIN
-    perform add_railway_station(name, (select id from company where company.name = owner));
-    perform add_railway_segment((select id from railway_station where railway_station.name = rs_from),
-                                (select id from railway_station where railway_station.name = rs_to), length);
-    perform init_warehouse(name);
-    perform init_repair_base(name);
-end
-$$ language plpgsql;
-
--- создать новую бригаду
+-- РЎРѕР·РґР°С‚СЊ РЅРѕРІСѓСЋ СЂРµРјРѕРЅС‚РЅСѓСЋ РєРѕРјР°РЅРґСѓ
 create or replace function add_repair_team(owner integer)
-    returns void as
+    returns integer as
 $$
-BEGIN
-    insert into repair_team(owner_id) values (owner);
+declare
+    new_id integer;
+begin
+    insert into repair_team(owner_id) values (owner) returning id into new_id;
+    return new_id;
 end
 $$ language plpgsql;
 
---добавить участника в бригаду
+-- Р”РѕР±Р°РІРёС‚СЊ РЅРѕРІРѕРіРѕ СѓС‡Р°СЃС‚РЅРёРєР° РІ РєРѕРјР°РЅРґСѓ
 create or replace function add_repair_team_member(team_id integer, member_name varchar(50))
-    returns void as
+    returns integer as
 $$
-BEGIN
-    insert into repair_team_member(name, repair_team_id) values (member_name, team_id);
+declare
+    new_id integer;
+begin
+    insert into repair_team_member(name, repair_team_id)
+    values (member_name, team_id)
+    returning id into new_id;
+    return new_id;
 end
 $$ language plpgsql;
 
--- сменить главу бригады
-create or replace function set_team_head(team_id integer, member_name integer)
+-- РР·РјРµРЅРёС‚СЊ РїСЂРёРЅР°РґР»РµР¶РЅРѕСЃС‚СЊ Рє РєРѕРјР°РЅРґРµ
+create or replace function change_team_affiliation(team_id integer, member_name varchar(50))
+    returns integer as
+$$
+declare
+    member_id integer;
+begin
+    member_id := (select id from repair_team_member where name = member_name);
+    update repair_team_member set repair_team_id = team_id where id = member_id;
+    return member_id;
+end
+$$ language plpgsql;
+
+-- РќР°Р·РЅР°С‡РёС‚СЊ РіР»Р°РІСѓ РєРѕРјР°РЅРґС‹
+create or replace function set_team_head(team_id integer, member_name varchar(50))
     returns void as
 $$
-BEGIN
+begin
     update repair_team
     set team_head_id=(select id from repair_team_member where repair_team_id = team_id and name = member_name)
     where repair_team.id = team_id;
 end
 $$ language plpgsql;
 
--- привоз ресурсов извне
-create or replace function new_warehouse_resource_allocation(station_name varchar(50), resources_km integer, allocated timestamp)
-    returns void as
+-- Р’С‹РґРµР»РёС‚СЊ СЂРµСЃСѓСЂСЃС‹ РЅР° Р±Р°Р·Сѓ
+create or replace function new_warehouse_resource_allocation(
+    station_name varchar(50), resources_km integer, allocated timestamp
+) returns integer as
 $$
-BEGIN
+declare
+    new_id integer;
+begin
     insert into warehouse_resource_allocation(warehouse_id, resources_allocated_km, allocated_at)
     values ((select id from warehouse where station_id = (select id from railway_station where name = station_name)),
-            resources_km, allocated);
+            resources_km, allocated)
+    returning id into new_id;
+    return new_id;
 end
 $$ language plpgsql;
 
--- начать транспортировку ресурсов
-create or replace function start_resource_transportation(from_station varchar(50), to_station varchar(50),
-                                                         resource_km integer, start timestamp)
-    returns void as
+-- РќР°С‡Р°С‚СЊ С‚СЂР°РЅСЃРїРѕСЂС‚ СЂРµСЃСѓСЂСЃРѕРІ
+create or replace function start_resource_transportation(
+    from_station varchar(50), to_station varchar(50), resource_km integer, start timestamp
+)
+    returns integer as
 $$
-BEGIN
+declare
+    new_id integer;
+begin
     insert into resource_transportation(from_warehouse_id, to_warehouse_id, start_at, resources_transportation_km)
-    values ((select id
-             from warehouse
-             where station_id = (select id
-                                 from railway_station
-                                 where name = from_station)), (select id
-                                                               from warehouse
-                                                               where station_id = (select id
-                                                                                   from railway_station
-                                                                                   where name = to_station)), start,
-            resource_km);
+    values ((select id from warehouse where station_id = (select id from railway_station where name = from_station)),
+            (select id from warehouse where station_id = (select id from railway_station where name = to_station)),
+            start, resource_km)
+    returning id into new_id;
+    return new_id;
 end
 $$ language plpgsql;
 
--- закончить транспортировку ресурсов
-create or replace function start_resource_transportation(transportation_id integer, finish timestamp)
+-- Р—Р°РІРµСЂС€РёС‚СЊ С‚СЂР°РЅСЃРїРѕСЂС‚ СЂРµСЃСѓСЂСЃРѕРІ
+create or replace function finish_resource_transportation(transportation_id integer, finish timestamp)
     returns void as
 $$
-BEGIN
-    update resource_transportation
-    set finish_at = finish
-    where id = transportation_id;
-    update warehouse
-    set resources_available_km = resources_available_km + (select resources_transportation_km
-                                                          from resource_transportation
-                                                          where id = transportation_id);
+begin
+    update resource_transportation set finish_at = finish where id = transportation_id;
 end
 $$ language plpgsql;
 
--- назначить маршрут бригаде
-create or replace function appoint_route_repair_team(team_id integer, from_station varchar(50), to_station varchar(50))
-    returns void as
+-- РќР°Р·РЅР°С‡РёС‚СЊ РјР°СЂС€СЂСѓС‚ РґР»СЏ РєРѕРјР°РЅРґС‹
+create or replace function appoint_route_for_repair_team(
+    team_id integer, from_station varchar(50), to_station varchar(50), plan_at timestamp
+)
+    returns integer as
 $$
-BEGIN
+declare
+    new_route_id integer;
+begin
     insert into repair_team_route(repair_team_id, from_base_id, to_base_id)
     values (team_id,
             (select id from repair_base where station_id = (select id from railway_station where name = from_station)),
-            (select id from repair_base where station_id = (select id from railway_station where name = to_station)));
-    update repair_base set size_teams=size_teams + 1;
+            (select id from repair_base where station_id = (select id from railway_station where name = to_station)))
+    returning id into new_route_id;
+    insert into repair_team_route_schedule(route_id, planned_at, departed_at, arrived_at)
+    values (new_route_id, plan_at, null, null);
+    return new_route_id;
 end
 $$ language plpgsql;
 
--- зарегистрировать поломку
-create or replace function add_new_fault(railway_seg_id integer, class fault_class, position_km integer, route integer,
-                                         found timestamp,
-                                         status fault_status)
-    returns void as
-$$
-DECLARE
-    seg_fault_id integer;
-BEGIN
-    seg_fault_id := add_segment_fault(railway_seg_id, class, position_km, status);
-    select add_site_fault_fixation(seg_fault_id, route, found, class);
-end
-$$ language plpgsql;
-
-
--- добавить segment_fault
-create or replace function add_segment_fault(railway_seg_id integer, class fault_class, position_km integer,
-                                             status fault_status)
-    returns integer as
+-- Р”РѕР±Р°РІРёС‚СЊ РЅРѕРІСѓСЋ РїРѕР»РѕРјРєСѓ РІ СЂРµРіРёСЃС‚СЂР°С‚РѕСЂ
+create or replace function add_segment_fault(
+    railway_seg_id integer, class fault_class, position_km integer, status fault_status
+) returns integer as
 $$
 declare
     seg_fault_id integer;
 begin
     insert into segment_fault
     values (default, railway_seg_id, class, position_km, status)
-    returning segment_fault.id into seg_fault_id;
+    returning id into seg_fault_id;
     return seg_fault_id;
 end
 $$ language plpgsql;
--- добавить segment_fault_fixation
-create or replace function add_site_fault_fixation(seg_fault_id integer, route integer, found timestamp,
-                                                   class fault_class)
-    returns void as
-$$
 
+-- Р”РѕР±Р°РІРёС‚СЊ РЅРѕРІСѓСЋ С„РёРєСЃР°С†РёСЋ РїРѕР»РѕРјРєРё РЅР° РјР°СЂС€СЂСѓС‚Рµ
+create or replace function add_site_fault_fixation(
+    seg_fault_id integer, route integer, found timestamp, class fault_class
+) returns integer as
+$$
+declare
+    new_id integer;
 begin
-    insert into site_fault_fixation values (default, seg_fault_id, route, found, class);
+    insert into site_fault_fixation (segment_fault_id, route_id, found_at, fault_class)
+    values (seg_fault_id, route, found, class)
+    returning id into new_id;
+    return new_id;
 end
 $$ language plpgsql;
 
-
--- начать починку поломки
-create or replace function start_fix_segment_fault(segment_fault_id integer)
-    returns void as
+-- Р”РѕР±Р°РІРёС‚СЊ РЅРѕРІСѓСЋ РїРѕР»РѕРјРєСѓ РЅР° РјР°СЂС€СЂСѓС‚Рµ
+create or replace function add_new_fault(
+    railway_seg_id integer, class fault_class, position_km integer, route integer, found timestamp,
+    status fault_status
+) returns integer as
 $$
+declare
+    seg_fault_id integer;
 begin
-    update segment_fault set fault_status='in_repair' where id = segment_fault_id;
+    seg_fault_id := add_segment_fault(railway_seg_id, class, position_km, status);
+    select add_site_fault_fixation(seg_fault_id, route, found, class);
 end
 $$ language plpgsql;
 
--- проблема исправлена
-create or replace function finish_fix_segment_fault(segment_fault_id integer)
+-- Change status of repair
+create or replace function change_fault_status(segment_fault_id integer, status fault_status)
     returns void as
 $$
 begin
-    update segment_fault set fault_status='repaired' where id = segment_fault_id;
+    update segment_fault set fault_status=status where id = segment_fault_id;
 end
 $$ language plpgsql;
 
-
--- остановка в маршруте
-create or replace function add_site(route integer, rw_seg_id integer, position_km integer, arrived timestamp,
-                                    type_site site_visit_type)
-    returns void as
+-- Add repair team site
+create or replace function add_site(
+    route integer, rw_seg_id integer, position_km integer, arrived timestamp, type_site site_visit_type
+) returns integer as
 $$
+declare
+    new_id integer;
 begin
     insert into inspection_repair_site(route_id, railway_segment_id, position_point_km, arrived_at, type_site_action)
-    values (route, rw_seg_id, position_km, arrived, type_site);
+    values (route, rw_seg_id, position_km, arrived, type_site)
+    returning id into new_id;
+    return new_id;
 end
 $$ language plpgsql;
 
--- получить все активные критические поломки в текстовом виде
+-- Р’С‹Р±СЂР°С‚СЊ СЃРїРёСЃРѕРє РЅРµРїРѕС‡РёРЅРµРЅРЅС‹С… РєСЂРёС‚РёС‡РµСЃРєРёС… РїРѕР»РѕРјРѕРє
 create or replace function get_critical_not_repaired_fault()
     returns TABLE
             (
@@ -275,8 +322,7 @@ begin
 end
 $$ language plpgsql;
 
-
--- получить id всех активных критических поломок
+-- Р’С‹Р±СЂР°С‚СЊ СЃРїРёСЃРѕРє Р°Р№РґРё РЅРµРїРѕС‡РёРЅРµРЅРЅС‹С… РєСЂРёС‚РёС‡РµСЃРєРёС… РїРѕР»РѕРјРѕРє
 create or replace function get_id_critical_not_repaired_fault()
     returns TABLE
             (
@@ -292,7 +338,7 @@ begin
 end
 $$ language plpgsql;
 
--- получить id всех поломок по fault_status
+-- Р’С‹Р±СЂР°С‚СЊ Р°Р№РґРё РїРѕР»РѕРјРѕРє СЃРѕРѕС‚РІРµС‚СЃС‚РІСѓСЋС‰РµРіРѕ СЃС‚Р°С‚СѓСЃР°
 create or replace function get_id_segment_fault(status fault_status)
     returns TABLE
             (
@@ -307,7 +353,7 @@ begin
 end
 $$ language plpgsql;
 
--- получить id всех поломок по fault_class
+-- Р’С‹Р±СЂР°С‚СЊ Р°Р№РґРё РїРѕР»РѕРјРѕРє СЃРѕРѕС‚РІРµС‚СЃС‚РІСѓСЋС‰РµРіРѕ СЃС‚Р°С‚СѓСЃР°
 create or replace function get_id_segment_fault(class fault_class)
     returns TABLE
             (
@@ -322,8 +368,7 @@ begin
 end
 $$ language plpgsql;
 
-
--- получить id всех поломок по fault_class и fault_status
+-- Р’С‹Р±СЂР°С‚СЊ Р°Р№РґРё РїРѕР»РѕРјРѕРє РїРѕ РєР»Р°СЃСЃСѓ Рё СЃС‚Р°С‚СѓСЃСѓ
 create or replace function get_id_segment_fault(class fault_class, status fault_status)
     returns TABLE
             (
@@ -339,8 +384,7 @@ begin
 end
 $$ language plpgsql;
 
---  получить расписание бригады на какой-то в какой то промежуток
-
+--  Р’С‹Р±СЂР°С‚СЊ Р·Р°РїР»Р°РЅРёСЂРѕРІР°РЅРЅС‹Рµ РјР°СЂС€СЂСѓС‚С‹ РІ Р·Р°РґР°РЅРЅРѕРј РїСЂРѕРјРµР¶СѓС‚РєРµ
 create or replace function get_repair_team_schedule(team_id integer, start timestamp, finish timestamp)
     returns TABLE
             (
@@ -360,24 +404,24 @@ begin
 end
 $$ language plpgsql;
 
--- начать выполнение маршрута
-create or replace function start_repair_team_route(team_id integer, arrived timestamp)
+-- Р—Р°РІРµСЂС€РёС‚СЊ РјР°СЂС€СЂСѓС‚
+create or replace function finish_repair_team_route(team_id integer, arrived timestamp)
     returns void as
 $$
 begin
     update repair_team_route_schedule
-    set arrived_at= arrived
+    set arrived_at = arrived
     where route_id = (select id from repair_team_route where repair_team_id = team_id);
 end
 $$ language plpgsql;
 
--- закончить выполнение маршрута
-create or replace function finish_repair_team_route(team_id integer, departed timestamp)
+-- РќР°С‡Р°С‚СЊ РјР°СЂС€СЂСѓС‚
+create or replace function start_repair_team_route(team_id integer, departed timestamp)
     returns void as
 $$
 begin
     update repair_team_route_schedule
-    set departed_at= departed
+    set departed_at = departed
     where route_id = (select id from repair_team_route where repair_team_id = team_id);
 end
 $$ language plpgsql;
