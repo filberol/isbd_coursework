@@ -2,29 +2,29 @@ import random
 from datetime import datetime, timedelta
 
 # Company
-company_count, company_names = 100, set()
+company_count, company_names = 500, set()
 # Railway station
-railway_station_count, railway_station_names = 100, set()
+railway_station_count, railway_station_names = 500, set()
 # Railway segment
-railway_segment_count, railway_segment_lengths = 500, []
+railway_segment_count, railway_segment_lengths = 1000, []
 railway_graph: list[list[tuple[int, int, int]]] = [[] for _ in range(railway_segment_count)]
 #               from -> (to_bs, seg_id, length)
 min_seg_len, max_seg_len = 15, 150
 # Repair team members
-people_count, people_names = 200, set()
+people_count, people_names = 600, set()
 # Repair teams
-repair_team_count = 100
+repair_team_count = 200
 # Repair base
 base_max_host = 20
 # Warehouses
-transportations_for_base_max = 5
+transportations_for_base_max = 100
 # Warehouse resource allocation
-allocations_for_base_max = 10
+allocations_for_base_max = 100
 allocation_max_km = 400
 # Team routes
-team_routes_count = 1000
+team_routes_count = 10000
 unfinished_routes = 10
-inspections_for_route = 3
+inspections_for_route = 5
 # Segment fault
 segment_fault_ids: list[list[int]] = [[] for _ in range(railway_segment_count)]    # seg_id -> (fault_id, seg_ptr)
 
@@ -73,7 +73,8 @@ def generate_companies(file):
     suffixes = ["Industries", "Technologies", "Solutions", "Enterprises", "Dynamics", "Synergy", "Ventures", "Pinnacle",
                 "Horizon", "Catalyst"]
     while len(company_names) < company_count:
-        name = f"{random.choice(prefixes)} {random.choice(suffixes)}"
+        name = f"{random.choice(prefixes)}-{random.choice(prefixes)} " \
+               f"{random.choice(suffixes)} {random.choice(suffixes)}"
         company_names.add(name)
     for name in company_names:
         file.write(f"insert into company (name) values('ООО \"{name}\"');\n")
@@ -84,7 +85,8 @@ def generate_stations(file):
     prefixes = ["Central", "North", "South", "East", "West", "Mid", "Grand", "Sunset", "Moonlight", "Silver"]
     suffixes = ["Station", "Junction", "Terminal", "Hub", "Crossing", "Point", "Plaza", "Square", "Park", "Center"]
     while len(railway_station_names) < railway_station_count:
-        name = f"{random.choice(prefixes)} {random.choice(suffixes)}"
+        name = f"{random.choice(prefixes)}-{random.choice(prefixes)} " \
+               f"{random.choice(suffixes)} {random.choice(suffixes)}"
         railway_station_names.add(name)
     for name in railway_station_names:
         owner_id = random.randint(1, company_count)
@@ -110,7 +112,8 @@ def create_people_names():
     suffixes = ["Smith", "Johnson", "Brown", "Garcia", "Lee", "Kumar", "Lopez", "Chang", "Nikolaev", "Strange",
                 "Perez", "Walker", "Mikhu", "Cruz", "Bell", "Harrison", "Chernova"]
     while len(people_names) < people_count:
-        name = f"{random.choice(prefixes)} {random.choice(suffixes)}"
+        name = f"{random.choice(prefixes)} {random.choice(suffixes)}, " \
+               f"{random.choice(suffixes)}, {random.choice(suffixes)}"
         people_names.add(name)
 
 
@@ -123,7 +126,7 @@ def generate_teams_and_members(file):
         owner_id = random.randint(1, company_count)
         file.write(f"insert into repair_team (owner_id, team_head_id) values({owner_id}, null);\n")
         for person_index in range(base_index, base_index + people_in_team):
-            name = names_list[person_index]
+            name = names_list[person_index - 1]
             file.write(f"insert into repair_team_member (name, repair_team_id) values(\'{name}\', {team_id});\n")
         file.write(f"update repair_team set team_head_id={base_index} where id={team_id};\n")
 
@@ -191,7 +194,7 @@ def generate_repair_team_routes(file, base_count):
         # Add found faults
         try:
             _, seg_id, seg_length = next((x for x in railway_graph[from_bs] if x[0] == to_bs))
-            real_inspections = random.randint(1, inspections_for_route)
+            real_inspections = random.randint(5, inspections_for_route)
             for fault_id in segment_fault_ids[seg_id - 1]:
                 file.write(f"update segment_fault set fault_status='repaired' where id={fault_id};\n")
             segment_fault_ids[seg_id - 1] = []
@@ -207,7 +210,7 @@ def generate_repair_team_routes(file, base_count):
                 file.write(f"insert into segment_fault (rw_seg_id, fault_class, position_point_km, fault_status) "
                            f"values ({seg_id}, '{fault_class}', {seg_point_km}, 'not_repaired');\n")
                 file.write(f"insert into site_fault_fixation (segment_fault_id, route_id, found_at, fault_class) "
-                           f"values ({curr_fault_id}, {route_ind + 1}, '{time}', '{fault_class}');\n")
+                           f"values ({curr_fault_id - 1}, {route_ind + 1}, '{time}', '{fault_class}');\n")
         except StopIteration:
             pass
     for route_ind in range(unfinished_routes):
