@@ -6,7 +6,7 @@ create index idx_repair_team_member_name on repair_team_member using hash (name)
 
 create index idx_site_fault_fixation_found_at on site_fault_fixation using btree (found_at);
 
-create index idx_repair_team_route_schedule_planned_At on repair_team_route_schedule using btree (planned_at);
+create index idx_repair_team_route_schedule_planned_at on repair_team_route_schedule using btree (planned_at);
 
 create index idx_segment_fault_fault_class on segment_fault using hash (fault_class);
 
